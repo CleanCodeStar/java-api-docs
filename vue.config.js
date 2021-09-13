@@ -22,8 +22,8 @@ module.exports = {
             // 配置跨域
             '/citrsw': {
                 // target: "https://xfd.xuanykj.com/",
-                target: "http://127.0.0.1:8532/context/",
-                // target: "http://192.168.1.111:8765/",
+                // target: "http://127.0.0.1:8114/",
+                target: "http://192.168.1.140:8532/context/citrsw/",
                 ws: true,
                 changOrigin: true,
                 pathRewrite: {

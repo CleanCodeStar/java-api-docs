@@ -9,10 +9,10 @@
       </el-col>
     </el-header>
     <el-container>
-
       <el-aside>
         <el-row>
-          <el-input class="search" v-model="search" placeholder="搜索" prefix-icon="el-icon-search"></el-input>
+          <el-input class="search" v-model="search" placeholder="类描述 / 方法描述 / 请求地址URI"
+                    prefix-icon="el-icon-search" clearable></el-input>
         </el-row>
         <div style="overflow-y:auto; height:calc(100% - 55px)">
           <el-menu
@@ -25,9 +25,9 @@
                 <i class="el-icon-title"></i>
                 <span slot="title" class="title-font">{{ doc_class.description }}</span>
               </template>
-              <el-menu-item :index="key+''"
+              <el-menu-item :index="key+'-'+mkey"
                             @click="openMenuItem(doc_method)"
-                            v-for="(doc_method,key) in doc_class.doc_methods" :key="key">
+                            v-for="(doc_method,mkey) in doc_class.doc_methods" :key="mkey">
                 {{ doc_method.description }}
               </el-menu-item>
             </el-submenu>
@@ -102,22 +102,24 @@
               </el-row>
               <pre v-if="!isExample" v-highlightjs="method.param_json"><code class="javascript code"></code></pre>
               <pre v-else v-highlightjs="method.param_example"><code class="javascript code"></code></pre>
-              <el-row>
-                <el-col :span="2">
-                  <div class="down-border" @click="showCode('java', method.param_android)"><i
-                      class="el-icon-android"></i></div>
-                </el-col>
-                <el-col :span="2">
-                  <div class="down-border" @click="showCode('ios', method.param_ios)"><i class="el-icon-ios"></i></div>
-                </el-col>
-                <el-col :span="2">
-                  <div class="down-border" @click="showCode('html', method.param_vue)"><i class="el-icon-vue"></i></div>
-                </el-col>
-              </el-row>
             </el-row>
             <el-row v-else>
               无
             </el-row>
+            <el-row>
+              <el-col :span="2">
+                <div class="down-border" @click="showCode('java', method.param_android)"><i
+                    class="el-icon-android"></i></div>
+              </el-col>
+              <el-col :span="2">
+                <div class="down-border" @click="showCode('ios', method.param_ios)"><i class="el-icon-ios"></i></div>
+              </el-col>
+              <el-col :span="2">
+                <div class="down-border" @click="showVueCode( method.param_vue)"><i class="el-icon-vue"></i>
+                </div>
+              </el-col>
+            </el-row>
+
             <el-row class="method-label">响应</el-row>
             <el-row v-if="method.return_json&&method.return_json.length>0">
               <pre v-highlightjs="method.return_json"><code class="javascript code"></code></pre>
@@ -130,7 +132,7 @@
                   <div class="down-border" @click="showCode('ios', method.return_ios)"><i class="el-icon-ios"></i></div>
                 </el-col>
                 <el-col :span="2">
-                  <div class="down-border" @click="showCode('html', method.return_vue)"><i class="el-icon-vue"></i>
+                  <div class="down-border" @click="showVueCode(method.return_vue)"><i class="el-icon-vue"></i>
                   </div>
                 </el-col>
               </el-row>
@@ -177,6 +179,36 @@
       <pre v-highlightjs="code"><code class="code" :class="codeClass"></code></pre>
     </el-dialog>
     <el-dialog
+        :center="true"
+        class="vue-dialog"
+        :visible.sync="vueDialogVisible"
+        width="80%">
+      <el-tabs v-model="vueActiveName">
+        <el-tab-pane :label="item.name" :name="key+''" v-for="(item,key) in vueCodes" :key="key">
+          <el-row class="vue-context">
+            <el-col class="vue-col" :span="12">
+              <div class="vue-title">
+                <div class="vue-title-name">HTML</div>
+                <div class="copy copyCode" @click="copyVueCode(item.value.HTML)">复制</div>
+              </div>
+              <div class="pre">
+                <pre v-highlightjs="item.value.HTML"><code class="code html"></code></pre>
+              </div>
+            </el-col>
+            <el-col class="vue-col" :span="12">
+              <div class="vue-title">
+                <div class="vue-title-name">JavaScript</div>
+                <div class="copy copyCode" @click="copyVueCode(item.value.JavaScript)">复制</div>
+              </div>
+              <div class="pre">
+                <pre v-highlightjs="item.value.JavaScript"><code class="code javascript"></code></pre>
+              </div>
+            </el-col>
+          </el-row>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+    <el-dialog
         title="接口测试"
         :center="true"
         :visible.sync="testDialogVisible"
@@ -213,7 +245,6 @@
                               :key="key">
                   <el-row class="param-value">
                     <el-col :span="21">
-
                       <el-date-picker v-if="item.type==='datetime'" type="datetime" :format="item.format"
                                       :value-format="item.format" placeholder="选择日期时间"
                                       v-model="requestParam[item.name]" clearable></el-date-picker>
@@ -285,7 +316,6 @@
     </el-dialog>
   </el-container>
 </template>
-
 <script>
 import defaultPage from "./Default"
 import Clipboard from 'clipboard'
@@ -304,6 +334,7 @@ export default {
       search: "",
       code: "",
       dialogVisible: false,
+      vueDialogVisible: false,
       codeClass: "ios",
       downUri: window.location.pathname.replace("/citrsw/index.html", "") + "/citrsw/api/down/markdown",
       testDialogVisible: false,
@@ -314,7 +345,9 @@ export default {
       paramItem: [],
       paramFiles: {},
       requestUrl: [],
-      result: {}
+      result: {},
+      vueActiveName: 0,
+      vueCodes: []
     };
   },
   mounted() {
@@ -324,9 +357,26 @@ export default {
     search(val) {
       this.docClasses = []
       for (let i = 0; i < this.doc.doc_classes.length; i++) {
-        let docClass = this.doc.doc_classes[i];
+        let docClass = Object.assign({}, this.doc.doc_classes[i]);
         if (docClass.description.indexOf(val) !== -1) {
           this.docClasses.push(docClass);
+        } else if (val.length > 0) {
+          let docMethods = docClass.doc_methods;
+          docClass.doc_methods = []
+          for (let j = 0; val && j < docMethods.length; j++) {
+            if (docMethods[j].description.indexOf(val) !== -1) {
+              docClass.doc_methods.push(docMethods[j]);
+            } else {
+              for (let k = 0; k < docMethods[j].uri_set.length; k++) {
+                if (docMethods[j].uri_set[k].indexOf(val) !== -1) {
+                  docClass.doc_methods.push(docMethods[j]);
+                }
+              }
+            }
+          }
+          if (docClass.doc_methods.length > 0) {
+            this.docClasses.push(docClass);
+          }
         }
       }
     }
@@ -361,17 +411,26 @@ export default {
           return _this.code
         }
       })
-      // eslint-disable-next-line no-unused-vars
-      clipboard.on('success', e => {
+      clipboard.on('success', () => {
         this.$message({message: '复制成功', showClose: true, type: 'success'})
         // 释放内存
         clipboard.destroy()
       })
-      // eslint-disable-next-line no-unused-vars
-      clipboard.on('error', e => {
+      clipboard.on('error', () => {
         this.$message({message: '复制失败,', showClose: true, type: 'error'})
         clipboard.destroy()
       })
+    },
+    copyVueCode(code) {
+      this.code = code;
+      this.copyCode()
+    },
+    showVueCode(code) {
+      this.vueDialogVisible = true
+      this.vueCodes = []
+      for (const codeKey in code) {
+        this.vueCodes.push({name: codeKey + "", value: code[codeKey + ""]})
+      }
     },
     /**
      * 打开测试
@@ -409,8 +468,8 @@ export default {
       this.requestHeaders.splice(index, 1);
     },
     queryApi() {
-      // this.axios.get("/citrsw/citrsw/api").then((response) => {
-        this.axios.get(window.location.pathname.replace("/citrsw/index.html", "") + "/citrsw/api").then((response) => {
+      // this.axios.get("/citrsw/api").then((response) => {
+      this.axios.get(window.location.pathname.replace("/citrsw/index.html", "") + "/citrsw/api").then((response) => {
         this.doc = response.data
         this.docClasses = this.doc.doc_classes;
       })
@@ -434,6 +493,7 @@ export default {
         Object.keys(this.requestParam).forEach((key) => {
           item.uri = item.uri.replace("{" + key + "}", this.requestParam[key])
         })
+        item.uri += ""
         if (JSON.stringify(this.paramFiles) !== "{}") {
           headers.push({key: "content-type", value: "multipart/form-data"})
           //转换为form-data形式
@@ -466,12 +526,18 @@ export default {
       localStorage.setItem("api-headers", JSON.stringify(this.requestHeaders))
       this.responseHeaders = []
       switch (item.mode) {
+          //get请求不允许通过body传递参数
         case "GET":
           this.axios.get(window.location.pathname.replace("/citrsw/index.html", "") + item.uri, {
             params: requestData,
-            data: this.requestJson,
             headers: header
           }).then((response) => {
+            let headers = response.headers;
+            for (let key in headers) {
+              this.responseHeaders.push({key: key + "", value: headers[key + ""]});
+            }
+            this.result = JSON.stringify(response.data, null, 2);
+          }).catch(response => {
             let headers = response.headers;
             for (let key in headers) {
               this.responseHeaders.push({key: key + "", value: headers[key + ""]});
@@ -482,6 +548,7 @@ export default {
         case "PUT":
           this.axios.put(window.location.pathname.replace("/citrsw/index.html", "") + item.uri, this.requestJson, {
             params: requestData,
+            data: this.requestJson,
             headers: header
           }).then((response) => {
             let headers = response.headers;
@@ -521,7 +588,6 @@ export default {
       let value = ""
       let str = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
       let result = '';
-      debugger
       switch (type) {
         case "int":
           value = Math.floor(Math.random() * (214748364))
@@ -739,7 +805,7 @@ export default {
   line-height: 1.5;
   font-weight: bold;
   border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1)
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
 .el-row {
@@ -899,5 +965,41 @@ export default {
   margin: 5px 0;
   font-weight: bold;
   font-size: 16px;
+}
+
+.vue-dialog >>> .el-tabs__active-bar {
+  background-color: #5cba5c;
+}
+
+.vue-dialog >>> .el-tabs__item.is-active {
+  color: #5cba5c;
+}
+
+.vue-dialog >>> .el-tabs__item:hover {
+  color: #5cba5c;
+}
+
+.vue-col {
+  padding: 0 5px;
+}
+
+.vue-title {
+  display: flex;
+  flex-flow: row;
+  justify-content: space-between;
+}
+
+.copy {
+  background-color: #5cba5c;
+  color: white;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.vue-title-name {
+  font-weight: bold;
+  font-size: 18px;
 }
 </style>
